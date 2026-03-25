@@ -1,52 +1,52 @@
-# Recone 🎯
+# recone 🎯
 
-**Recone** is a comprehensive, automated PowerShell suite designed to be the "one" tool you need for the initial stages of a security audit. It combines the power of ProjectDiscovery's best tools into a single, high-performance pipeline.
+**recone** is an automated PowerShell-based suite designed for high-performance reconnaissance and vulnerability scanning. It streamlines asset discovery and security auditing by orchestrating industry-standard tools into a single, seamless workflow.
 
 ## ✨ Key Features
-* **Recon + One:** A unified workflow that handles everything from discovery to vulnerability reporting.
-* **Auto-Update Engine:** Stays current by checking the latest version from GitHub on every launch.
-* **Smart Probing:** Efficiently filters alive hosts and identifies technologies/titles.
-* **Deep Asset Discovery:** Uses recursive crawling to find hidden endpoints and parameters.
-* **Modular Scanning:** Runs targeted Nuclei audits with customizable rate limits and severity levels.
-* **Automated Reporting:** Clean, organized output categorized by severity (Critical to Info).
+* **Zero-Setup Installer:** Automatically detects and downloads missing binary tools from official sources.
+* **Auto-Update Engine:** Checks GitHub for the latest version of the script on every launch.
+* **Smart Probing:** Efficiently filters alive hosts and identifies technologies and page titles.
+* **Deep Asset Discovery:** Utilizes recursive crawling to extract hidden endpoints and parameters.
+* **Modular Scanning:** Executes targeted Nuclei audits with customizable rate limits and severity filters.
+* **Organized Reporting:** Automatically categorizes findings into severity-based directories.
 
-## 📋 Pre-requirements
+## 📋 Prerequisites
 
-Recone acts as an orchestrator. To function correctly, ensure the following binary tools are in the **same directory** as the script:
+recone handles the heavy lifting for you. While the following tools are required, the script will automatically download and install the latest versions if they are not found in the directory:
 
 | Binary | Role |
 | :--- | :--- |
-| **Subfinder** | Subdomain Enumeration |
-| **Naabu** | Fast Port Scanning |
+| **Subfinder** | Subdomain Discovery |
+| **Naabu** | Fast Port Probing |
 | **Httpx** | Service & Tech Fingerprinting |
-| **Katana** | Next-gen Web Crawling |
-| **Nuclei** | Template-based Vulnerability Scanning |
+| **Katana** | Advanced Web Crawling |
+| **Nuclei** | Vulnerability Scanning |
 
-> **Pro Tip:** Use the built-in **Maintenance Mode** during startup to automatically update these binaries and your Nuclei templates.
+> **Maintenance Mode:** Use the built-in maintenance prompt during startup to keep your binaries and Nuclei templates updated.
 
 ## 🚀 Getting Started
 
-1.  **Clone the Repository:**
-    ```bash
-    git clone [https://github.com/BERKVY/Recone.git](https://github.com/BERKVY/Recone.git)
-    cd Recone
-    ```
-2.  **Add Binaries:** Copy your `subfinder.exe`, `naabu.exe`, etc., into the root folder.
-3.  **Run Recone:**
-    ```powershell
-    .\recone.ps1
-    ```
+1. **Clone the Repository:**
+   ```powershell
+   git clone [https://github.com/BERKVY/recone.git](https://github.com/BERKVY/recone.git)
+   cd recone
+   ```
+2. **Run the Script:**
+   ```powershell
+   .\recone.ps1
+   ```
+   *Note: On first run, the script will offer to download any missing .exe tools for you.*
 
 ## 🛠 Workflow Logic
-1.  **Integrity Check:** Verifies all required `.exe` files are present.
-2.  **Self-Update:** Checks GitHub for a newer version of the `recone.ps1` script.
-3.  **Discovery Phase:** Runs subdomain scans and port discovery.
-4.  **Analysis Phase:** Fingerprints active services and crawls for endpoints.
-5.  **Audit Phase:** Executes vulnerability scans via Nuclei.
-6.  **Data Categorization:** Results are saved and sorted into target-specific folders.
+1. **Tool Check:** Verifies presence of required binaries; initiates auto-install if missing.
+2. **Self-Update:** Syncs with the GitHub repository for script updates.
+3. **Discovery:** Performs subdomain enumeration and active port discovery.
+4. **Analysis:** Fingerprints services and crawls for active endpoints.
+5. **Audit:** Runs vulnerability scans based on user-selected severity levels.
+6. **Reporting:** Saves sorted results into target-specific folders.
 
 ## ⚠️ Ethical Use & Disclaimer
-Recone was developed for **legal security testing and educational purposes only**. Using this tool against targets without prior written consent is illegal. The developer (**BERKVY**) assumes no liability for any misuse or damage caused by this program.
+recone is intended for **legal and ethical security testing only**. Using this tool against targets without prior written consent is illegal. The developer (**BERKVY**) assumes no liability for any misuse or damage caused by this program.
 
 ---
-Crafted with 🛡️ by [BERKVY](https://github.com/BERKVY)
+Developed by [BERKVY](https://github.com/BERKVY)
