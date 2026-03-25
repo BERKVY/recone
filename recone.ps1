@@ -1,27 +1,41 @@
 $OutputEncoding = [System.Text.Encoding]::UTF8
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
-$CURRENT_VERSION = "1.1.0"
+$CURRENT_VERSION = "1.1.1"
 $REPO_OWNER = "BERKVY"
 $REPO_NAME  = "recone"
-$FILE_NAME  = "recone.ps1"
-$RAW_URL    = "https://raw.githubusercontent.com/$REPO_OWNER/$REPO_NAME/main/$FILE_NAME"
 
+# --- UNIVERSAL BINARY AUTO-UPDATER ---
 try {
-    $RemoteCode = (Invoke-WebRequest -Uri $RAW_URL -UseBasicParsing -ErrorAction Stop).Content
-    if ($RemoteCode -match '\$CURRENT_VERSION = "([^"]+)"') {
-        $RemoteVersion = $Matches[1]
-        if ($RemoteVersion -gt $CURRENT_VERSION) {
-            Write-Host "[!] New version available: v$RemoteVersion" -ForegroundColor Yellow
-            $choice = Read-Host "[?] Update now? (y/n)"
-            if ($choice.ToLower() -eq 'y') {
-                Set-Content -Path $MyInvocation.MyCommand.Path -Value $RemoteCode -Encoding UTF8
-                Write-Host "[+] Updated! Please restart the script." -ForegroundColor Green
+    # Check the GitHub API for the latest release metadata
+    $ApiUrl = "https://api.github.com/repos/$REPO_OWNER/$REPO_NAME/releases/latest"
+    $Release = Invoke-RestMethod -Uri $ApiUrl -UseBasicParsing -ErrorAction Stop
+    $RemoteVersion = $Release.tag_name -replace 'v', ''
+
+    if ($RemoteVersion -gt $CURRENT_VERSION) {
+        Write-Host "[!] New Binary Release Available: v$RemoteVersion" -ForegroundColor Yellow
+        $choice = Read-Host "[?] Download and update now? (y/n)"
+        if ($choice.ToLower() -eq 'y') {
+            # Find the first .exe file in the release assets
+            $Asset = $Release.assets | Where-Object { $_.name -like "*.exe" } | Select-Object -First 1
+            if ($null -ne $Asset) {
+                $UpdateName = "recone_v$RemoteVersion.exe"
+                $UpdatePath = Join-Path $PSScriptRoot $UpdateName
+                
+                Write-Host "[i] Downloading $($Asset.name)..." -ForegroundColor Cyan
+                Invoke-WebRequest -Uri $Asset.browser_download_url -OutFile $UpdatePath -ErrorAction Stop
+                
+                Write-Host "`n[+] Update downloaded as '$UpdateName'!" -ForegroundColor Green
+                Write-Host "[!] ACTION: Close this window, delete your old .exe, and use '$UpdateName'." -ForegroundColor Yellow
+                Write-Host "[i] Press any key to exit..." -ForegroundColor Gray
+                $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
                 exit
             }
         }
     }
-} catch {}
+} catch {
+    Write-Host "[!] Update check skipped (Offline or API limit)." -ForegroundColor Gray
+}
 
 $ScriptDir = $PSScriptRoot
 if (-not $ScriptDir) { $ScriptDir = Get-Location }
@@ -45,7 +59,7 @@ function Install-Tool($ToolExe) {
         Expand-Archive -Path $ZipPath -DestinationPath $TempDir -Force
         Get-ChildItem -Path $TempDir -Filter "*.exe" -Recurse | Move-Item -Destination $ScriptDir -Force
         Remove-Item $TempDir -Recurse -Force
-        Write-Host "[V] $ToolExe installed (clean)." -ForegroundColor Green
+        Write-Host "[V] $ToolExe installed." -ForegroundColor Green
     } catch {
         if (Test-Path $TempDir) { Remove-Item $TempDir -Recurse -Force }
         Write-Host "[X] Failed to install $ToolExe." -ForegroundColor Red
@@ -84,7 +98,6 @@ if ($UPDATE_CHECK.ToLower() -ne 'n') {
 
 $RAW_TARGET = Read-Host "`n[?] Enter the target domain or IP"
 if (-not $RAW_TARGET) { exit }
-
 $TARGET = $RAW_TARGET.Trim() -replace '[^a-zA-Z0-9.-]', ''
 $TARGET = $TARGET.Replace("http", "").Replace("https", "").Replace("://", "").Trim('.')
 
@@ -116,28 +129,24 @@ $WAF_EXCLUDE   = Read-Host "[?] 5. Exclude WAF detection templates? (y/N)"
 
 $AllowedSeverities = @("critical", "high", "medium", "low", "info", "unknown")
 Write-Host "`n[+] SEVERITY SUGGESTIONS" -ForegroundColor Yellow
-Write-Host "  [critical] - RCE, SQLi, Takeovers (Immediate Action)"
-Write-Host "  [high]     - Broken Auth, LFI, Sensitive Leaks"
-Write-Host "  [medium]   - XSS, CSRF, Misconfigurations"
-Write-Host "  [low]      - Open Redirects, Missing Headers"
-Write-Host "  [info]     - Technology detection & Versioning"
-Write-Host "  [Enter]    - ALL SEVERITIES (Default Search)"
+Write-Host "  [critical] - RCE, SQLi, Takeovers"
+Write-Host "  [high]     - Broken Auth, LFI, Leaks"
+Write-Host "  [medium]   - XSS, CSRF, Misconfigs"
+Write-Host "  [low]      - Open Redirects, Headers"
+Write-Host "  [info]     - Technology discovery"
+Write-Host "  [Enter]    - ALL SEVERITIES"
 
 $SEV_VAL = Read-Host "`n[?] Select severities (comma-separated) [Enter for ALL]"
 
 Write-Host "`n[+] RATE LIMIT SUGGESTIONS" -ForegroundColor Yellow
-Write-Host "  [1-5]   - ULTRA GHOST (Internal IPS Bypass / High Stealth)"
-Write-Host "  [15-25] - STEALTH (WAF Bypass for public sites)"
-Write-Host "  [50-100]- CORPORATE (Standard for internal audits)"
-Write-Host "  [Enter] - UNLIMITED (Max Speed - Use only if whitelisted!)"
+Write-Host "  [1-5]   - ULTRA GHOST (Stealth)"
+Write-Host "  [15-25] - STEALTH (WAF Bypass)"
+Write-Host "  [50-100]- CORPORATE (Standard)"
+Write-Host "  [Enter] - UNLIMITED (Max Speed)"
 
 $RL_INPUT = Read-Host "`n[?] Enter Rate Limit (Requests/sec) [Enter for UNLIMITED]"
-if ($RL_INPUT -eq "") { 
-    $RL_VAL = $null 
-    Write-Host "[!] UNLIMITED MODE ACTIVATED - Full Speed." -ForegroundColor Red
-} else { 
-    $RL_VAL = $RL_INPUT 
-}
+$RL_VAL = if ($RL_INPUT -eq "") { $null } else { $RL_INPUT }
+if ($null -eq $RL_VAL) { Write-Host "[!] UNLIMITED MODE ACTIVATED." -ForegroundColor Red }
 
 $CONCURRENCY = "25"; $BULK = "10"
 if ($null -eq $RL_VAL) { $CONCURRENCY = "100"; $BULK = "25" }
@@ -192,11 +201,21 @@ if ($SEV_VAL) { $N_ARGS += "-severity", $SEV_VAL }
 if ($WAF_EXCLUDE.ToLower() -eq "y") { $N_ARGS += "-exclude-id", "dns-waf-detect,waf-detect" }
 & (Join-Path $ScriptDir "nuclei.exe") @N_ARGS
 
+# --- COLOR RESET FIX ---
+[Console]::ResetColor() 
+Write-Host "" 
+
 if (Test-Path "$TARGET_DIR\all_vulnerabilities.txt") {
+    Write-Host "[i] Sorting vulnerabilities..." -ForegroundColor Gray
     $AllVulns = Get-Content "$TARGET_DIR\all_vulnerabilities.txt"
     foreach ($sev in $AllowedSeverities) {
         $Match = $AllVulns | Select-String -Pattern "\[$sev\]"
-        if ($Match) { $Match | Out-File -FilePath (Join-Path $VUL_DIR "$sev.txt") -Encoding UTF8 }
+        if ($Match) { 
+            $Match | Out-File -FilePath (Join-Path $VUL_DIR "$sev.txt") -Encoding UTF8 
+        }
     }
 }
+
 Write-Host "`n[V] SCAN COMPLETE! CHECK THE '$TARGET' FOLDER." -ForegroundColor Green
+Write-Host "----------------------------------------------`n" -ForegroundColor Gray
+[Console]::ResetColor()
