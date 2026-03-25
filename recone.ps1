@@ -1,7 +1,7 @@
 $OutputEncoding = [System.Text.Encoding]::UTF8
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
-$CURRENT_VERSION = "1.0.0"
+$CURRENT_VERSION = "1.1.0"
 $REPO_OWNER = "BERKVY"
 $REPO_NAME  = "recone"
 $FILE_NAME  = "recone.ps1"
@@ -34,22 +34,16 @@ function Install-Tool($ToolExe) {
     }
     $Repo = $RepoMap[$ToolExe]
     $TempDir = Join-Path $ScriptDir "temp_install"
-    
     try {
         if (Test-Path $TempDir) { Remove-Item $TempDir -Recurse -Force }
         New-Item -ItemType Directory -Path $TempDir | Out-Null
-        
         $ApiUrl = "https://api.github.com/repos/projectdiscovery/$Repo/releases/latest"
         $Release = Invoke-RestMethod -Uri $ApiUrl -ErrorAction Stop
         $Asset = $Release.assets | Where-Object { $_.name -match "windows" -and $_.name -match "amd64" -and $_.name -match "zip" } | Select-Object -First 1
-        
         $ZipPath = Join-Path $TempDir "$Repo.zip"
         Invoke-WebRequest -Uri $Asset.browser_download_url -OutFile $ZipPath -ErrorAction Stop
-        
         Expand-Archive -Path $ZipPath -DestinationPath $TempDir -Force
-        
         Get-ChildItem -Path $TempDir -Filter "*.exe" -Recurse | Move-Item -Destination $ScriptDir -Force
-        
         Remove-Item $TempDir -Recurse -Force
         Write-Host "[V] $ToolExe installed (clean)." -ForegroundColor Green
     } catch {
@@ -72,9 +66,7 @@ Write-Host @"
 
 $Tools = @("subfinder.exe", "naabu.exe", "httpx.exe", "katana.exe", "nuclei.exe")
 foreach ($Tool in $Tools) {
-    if (-not (Test-Path (Join-Path $ScriptDir $Tool))) {
-        Install-Tool -ToolExe $Tool
-    }
+    if (-not (Test-Path (Join-Path $ScriptDir $Tool))) { Install-Tool -ToolExe $Tool }
 }
 
 Write-Host "`n[+] MAINTENANCE" -ForegroundColor Cyan
@@ -84,18 +76,14 @@ if ($UPDATE_CHECK.ToLower() -ne 'n') {
     foreach ($ToolName in $Tools) {
         $ToolPath = Join-Path $ScriptDir $ToolName
         if (Test-Path $ToolPath) {
-            Write-Host "[-] Updating $ToolName..." -ForegroundColor Gray
             & $ToolPath -up -silent
-            if ($ToolName -eq "nuclei.exe") {
-                Write-Host "[-] Updating Nuclei Templates..." -ForegroundColor Gray
-                & $ToolPath -ut -silent
-            }
+            if ($ToolName -eq "nuclei.exe") { & $ToolPath -ut -silent }
         }
     }
 }
 
 $RAW_TARGET = Read-Host "`n[?] Enter the target domain or IP"
-if (-not $RAW_TARGET) { Write-Host "[!] Error: Target empty!" -ForegroundColor Red; exit }
+if (-not $RAW_TARGET) { exit }
 
 $TARGET = $RAW_TARGET.Trim() -replace '[^a-zA-Z0-9.-]', ''
 $TARGET = $TARGET.Replace("http", "").Replace("https", "").Replace("://", "").Trim('.')
@@ -126,11 +114,31 @@ $TECH_DETECT   = Read-Host "[?] 3. Fingerprint technologies & titles? (y/N)"
 $KATANA_PROMPT = Read-Host "[?] 4. Use Katana for deep crawling? (y/N)"
 $WAF_EXCLUDE   = Read-Host "[?] 5. Exclude WAF detection templates? (y/N)"
 
-$AllowedSeverities = @("critical", "high", "medium", "low", "info")
+$AllowedSeverities = @("critical", "high", "medium", "low", "info", "unknown")
+Write-Host "`n[+] SEVERITY SUGGESTIONS" -ForegroundColor Yellow
+Write-Host "  [critical] - RCE, SQLi, Takeovers (Immediate Action)"
+Write-Host "  [high]     - Broken Auth, LFI, Sensitive Leaks"
+Write-Host "  [medium]   - XSS, CSRF, Misconfigurations"
+Write-Host "  [low]      - Open Redirects, Missing Headers"
+Write-Host "  [info]     - Technology detection & Versioning"
+Write-Host "  [Enter]    - ALL SEVERITIES (Default Search)"
+
 $SEV_VAL = Read-Host "`n[?] Select severities (comma-separated) [Enter for ALL]"
 
+Write-Host "`n[+] RATE LIMIT SUGGESTIONS" -ForegroundColor Yellow
+Write-Host "  [1-5]   - ULTRA GHOST (Internal IPS Bypass / High Stealth)"
+Write-Host "  [15-25] - STEALTH (WAF Bypass for public sites)"
+Write-Host "  [50-100]- CORPORATE (Standard for internal audits)"
+Write-Host "  [Enter] - UNLIMITED (Max Speed - Use only if whitelisted!)"
+
 $RL_INPUT = Read-Host "`n[?] Enter Rate Limit (Requests/sec) [Enter for UNLIMITED]"
-$RL_VAL = if ($RL_INPUT -eq "") { $null } else { $RL_INPUT }
+if ($RL_INPUT -eq "") { 
+    $RL_VAL = $null 
+    Write-Host "[!] UNLIMITED MODE ACTIVATED - Full Speed." -ForegroundColor Red
+} else { 
+    $RL_VAL = $RL_INPUT 
+}
+
 $CONCURRENCY = "25"; $BULK = "10"
 if ($null -eq $RL_VAL) { $CONCURRENCY = "100"; $BULK = "25" }
 
@@ -139,29 +147,25 @@ Write-Host "----------------------------------------------" -ForegroundColor Gre
 
 $SUB_FILE = "$TARGET_DIR\subdomains.txt"
 if ($FIND_SUBS.ToLower() -ne 'n') {
-    Write-Host "[1/4] Discovering subdomains (Subfinder)..." -ForegroundColor Blue
-    $subfinder = Join-Path $ScriptDir "subfinder.exe"
-    & $subfinder -d $TARGET -o $SUB_FILE -silent
+    Write-Host "[1/4] Discovering subdomains..." -ForegroundColor Blue
+    $SUB_ARGS = @("-d", $TARGET, "-o", $SUB_FILE, "-silent")
+    if ($INTENSIVE_SUB.ToLower() -eq 'y') { $SUB_ARGS += "-all" }
+    & (Join-Path $ScriptDir "subfinder.exe") @SUB_ARGS
 }
-
 Add-Content -Path $SUB_FILE -Value $TARGET
-$CleanedSubs = Get-Content $SUB_FILE | ForEach-Object { $_.Trim() -replace '[^a-zA-Z0-9.-]', '' } | Where-Object { $_ -ne "" } | Sort-Object -Unique
+$CleanedSubs = Get-Content $SUB_FILE | Sort-Object -Unique
 $CleanedSubs | Out-File $SUB_FILE -Encoding ASCII
-Write-Host "[+] Total Subdomains Found: ($($CleanedSubs.Count))" -ForegroundColor Green
 
 Write-Host "[2/4] Probing services..." -ForegroundColor Blue
-$naabu = Join-Path $ScriptDir "naabu.exe"; $httpx = Join-Path $ScriptDir "httpx.exe"
-$NAABU_ARGS = @("-silent", "-l", $SUB_FILE) 
+$NAABU_ARGS = @("-silent", "-l", $SUB_FILE)
 if ($FULL_PORTS.ToLower() -eq 'y') { $NAABU_ARGS += "-p", "-" } else { $NAABU_ARGS += "-tp", "1000" }
 
-$HTTPX_ARGS = @("-silent", "-mc", "200,301,302,403", "-fpt", "-nc")
+$HTTPX_ARGS = @("-silent", "-nc")
 if ($TECH_DETECT.ToLower() -eq 'y') { $HTTPX_ARGS += "-td", "-title", "-sc" }
 if ($null -ne $RL_VAL) { $HTTPX_ARGS += "-rl", $RL_VAL }
 
 $ALIVE_FILE = "$TARGET_DIR\alive.txt"
-$HttpxOutput = & $naabu @NAABU_ARGS | & $httpx @HTTPX_ARGS
-if (-not $HttpxOutput) { $HttpxOutput = Get-Content $SUB_FILE | & $httpx @HTTPX_ARGS }
-
+$HttpxOutput = & (Join-Path $ScriptDir "naabu.exe") @NAABU_ARGS | & (Join-Path $ScriptDir "httpx.exe") @HTTPX_ARGS
 if ($null -ne $HttpxOutput) {
     $HttpxOutput | Write-Host
     $HttpxOutput | ForEach-Object { ($_ -split ' ')[0] } | Sort-Object -Unique | Out-File $ALIVE_FILE -Encoding ASCII
@@ -172,24 +176,21 @@ if ($null -ne $HttpxOutput) {
 $ENDPOINTS_FILE = "$TARGET_DIR\endpoints.txt"
 if ($KATANA_PROMPT.ToLower() -eq "y") {
     Write-Host "[3/4] Starting Katana Crawling..." -ForegroundColor Blue
-    $KAT_ARGS = @("-list", $ALIVE_FILE, "-silent", "-jc", "-kf", "all", "-d", "2", "-o", "$TARGET_DIR\endpoints_raw.txt")
+    $KAT_ARGS = @("-list", $ALIVE_FILE, "-silent", "-nc", "-jc", "-kf", "all", "-d", "2", "-o", "$TARGET_DIR\endpoints_raw.txt")
     if ($null -ne $RL_VAL) { $KAT_ARGS += "-rl", $RL_VAL }
     & (Join-Path $ScriptDir "katana.exe") @KAT_ARGS
-    if (Test-Path "$TARGET_DIR\endpoints_raw.txt") { 
-        Get-Content "$TARGET_DIR\endpoints_raw.txt" | Sort-Object -Unique > $ENDPOINTS_FILE 
-    }
+    if (Test-Path "$TARGET_DIR\endpoints_raw.txt") { Get-Content "$TARGET_DIR\endpoints_raw.txt" | Sort-Object -Unique > $ENDPOINTS_FILE }
 }
 if (-not (Test-Path $ENDPOINTS_FILE)) { Copy-Item $ALIVE_FILE $ENDPOINTS_FILE -Force }
 
 $FinalCount = (Get-Content $ENDPOINTS_FILE | Measure-Object).Count
 Write-Host "[4/4] Starting Nuclei Scan on $FinalCount targets..." -ForegroundColor Blue
-$nuclei = Join-Path $ScriptDir "nuclei.exe"
-$N_ARGS = @("-l", $ENDPOINTS_FILE, "-no-httpx", "-stats", "-ni", "-o", "$TARGET_DIR\all_vulnerabilities.txt")
+$N_ARGS = @("-l", $ENDPOINTS_FILE, "-no-httpx", "-stats", "-ni", "-nc", "-o", "$TARGET_DIR\all_vulnerabilities.txt")
 $N_ARGS += "-c", $CONCURRENCY, "-bulk-size", $BULK
 if ($null -ne $RL_VAL) { $N_ARGS += "-rl", $RL_VAL }
 if ($SEV_VAL) { $N_ARGS += "-severity", $SEV_VAL }
 if ($WAF_EXCLUDE.ToLower() -eq "y") { $N_ARGS += "-exclude-id", "dns-waf-detect,waf-detect" }
-& $nuclei @N_ARGS
+& (Join-Path $ScriptDir "nuclei.exe") @N_ARGS
 
 if (Test-Path "$TARGET_DIR\all_vulnerabilities.txt") {
     $AllVulns = Get-Content "$TARGET_DIR\all_vulnerabilities.txt"
