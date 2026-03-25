@@ -26,6 +26,38 @@ try {
 $ScriptDir = $PSScriptRoot
 if (-not $ScriptDir) { $ScriptDir = Get-Location }
 
+function Install-Tool($ToolExe) {
+    Write-Host "[!] $ToolExe not found. Downloading..." -ForegroundColor Yellow
+    $RepoMap = @{
+        "subfinder.exe" = "subfinder"; "naabu.exe" = "naabu"; "httpx.exe" = "httpx";
+        "katana.exe" = "katana"; "nuclei.exe" = "nuclei"
+    }
+    $Repo = $RepoMap[$ToolExe]
+    $TempDir = Join-Path $ScriptDir "temp_install"
+    
+    try {
+        if (Test-Path $TempDir) { Remove-Item $TempDir -Recurse -Force }
+        New-Item -ItemType Directory -Path $TempDir | Out-Null
+        
+        $ApiUrl = "https://api.github.com/repos/projectdiscovery/$Repo/releases/latest"
+        $Release = Invoke-RestMethod -Uri $ApiUrl -ErrorAction Stop
+        $Asset = $Release.assets | Where-Object { $_.name -match "windows" -and $_.name -match "amd64" -and $_.name -match "zip" } | Select-Object -First 1
+        
+        $ZipPath = Join-Path $TempDir "$Repo.zip"
+        Invoke-WebRequest -Uri $Asset.browser_download_url -OutFile $ZipPath -ErrorAction Stop
+        
+        Expand-Archive -Path $ZipPath -DestinationPath $TempDir -Force
+        
+        Get-ChildItem -Path $TempDir -Filter "*.exe" -Recurse | Move-Item -Destination $ScriptDir -Force
+        
+        Remove-Item $TempDir -Recurse -Force
+        Write-Host "[V] $ToolExe installed (clean)." -ForegroundColor Green
+    } catch {
+        if (Test-Path $TempDir) { Remove-Item $TempDir -Recurse -Force }
+        Write-Host "[X] Failed to install $ToolExe." -ForegroundColor Red
+    }
+}
+
 Write-Host @"
                                    
   _ __ ___  ___ ___  _ __   ___  
@@ -41,7 +73,7 @@ Write-Host @"
 $Tools = @("subfinder.exe", "naabu.exe", "httpx.exe", "katana.exe", "nuclei.exe")
 foreach ($Tool in $Tools) {
     if (-not (Test-Path (Join-Path $ScriptDir $Tool))) {
-        Write-Host "[!] Warning: $Tool not found in $ScriptDir." -ForegroundColor Red
+        Install-Tool -ToolExe $Tool
     }
 }
 
